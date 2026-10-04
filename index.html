@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Diagnostic Assessment</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #ffffff;
+    --surface: #f2f5f4;
+    --line: #d6ddda;
+    --ink: #16211e;
+    --muted: #5c6b66;
+    --accent: #0e6b5f;
+    --accent-ink: #ffffff;
+    --urgent: #b3412b;
+    --radius: 10px;
+    --maxw: 44rem;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  *, *::before, *::after { box-sizing: inherit; }
+  html { scroll-padding-top: 5rem; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Instrument Sans", "Helvetica Neue", Arial, system-ui, sans-serif;
+    font-size: 1.0625rem;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Timer rail: the one memorable element. A thin bar across the very top drains as time passes. */
+  .rail {
+    position: fixed; top: env(safe-area-inset-top, 0px); left: 0; right: 0; height: 6px;
+    background: var(--line); z-index: 10;
+  }
+  .rail > i {
+    display: block; height: 100%; width: 100%;
+    background: var(--accent); transform-origin: left center;
+    transition: transform 1s linear, background-color .3s;
+  }
+  .rail.urgent > i { background: var(--urgent); }
+  .rail.hidden { display: none; }
+
+  header.bar {
+    position: sticky; top: env(safe-area-inset-top, 0px);
+    background: var(--paper);
+    border-bottom: 1px solid var(--line);
+    padding: .85rem 1.25rem;
+    display: flex; justify-content: space-between; align-items: baseline; gap: 1rem;
+    z-index: 5;
+  }
+  .bar .where { font-weight: 500; font-size: .95rem; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar .clock { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 1.15rem; white-space: nowrap; }
+  .bar .clock.urgent { color: var(--urgent); }
+
+  main { max-width: var(--maxw); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+
+  h1 { font-size: clamp(1.6rem, 4vw, 2.1rem); line-height: 1.2; font-weight: 600; margin: 0 0 .5rem; letter-spacing: -.01em; }
+  h2 { font-size: 1.35rem; font-weight: 600; margin: 0 0 1rem; letter-spacing: -.005em; }
+  p { margin: 0 0 1rem; }
+  .muted { color: var(--muted); }
+  .org { color: var(--muted); font-weight: 500; margin-bottom: .25rem; }
+
+  .plan { margin: 1.5rem 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+  .plan li { display: flex; justify-content: space-between; gap: 1rem; padding: .7rem 0; border-bottom: 1px solid var(--line); }
+  .plan li span:last-child { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  label.field { display: block; margin: 1.1rem 0; }
+  label.field > span { display: block; font-weight: 500; margin-bottom: .35rem; }
+  input[type=text], input[type=email], textarea {
+    width: 100%; font: inherit; color: inherit;
+    padding: .7rem .85rem; border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--paper);
+  }
+  textarea { resize: vertical; min-height: 6rem; }
+  input:focus-visible, textarea:focus-visible, button:focus-visible, .opt:focus-within {
+    outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px;
+  }
+
+  .q { margin: 0 0 2.25rem; }
+  .q .num { color: var(--muted); font-weight: 500; font-size: .95rem; margin-bottom: .35rem; }
+  .q .stem { font-weight: 500; margin-bottom: 1rem; }
+  .q img { display: block; max-width: 100%; max-height: 22rem; width: auto; border-radius: var(--radius); border: 1px solid var(--line); margin: 0 0 1rem; }
+  .part1 .q { user-select: none; -webkit-user-select: none; }
+
+  .opts { display: grid; gap: .5rem; }
+  .opt {
+    display: grid; grid-template-columns: 1.5rem 1fr; gap: .75rem; align-items: start;
+    padding: .8rem .95rem; border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--paper); cursor: pointer;
+  }
+  .opt:hover { background: var(--surface); }
+  .opt input { margin: .3rem 0 0; accent-color: var(--accent); width: 1.1rem; height: 1.1rem; }
+  .opt:has(input:checked) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, var(--paper)); }
+
+  .scale { color: var(--muted); font-size: .95rem; margin: 0 0 1rem; padding-left: 1.1rem; }
+  .grid { width: 100%; border-collapse: collapse; font-size: .95rem; }
+  .grid th, .grid td { padding: .55rem .4rem; border-bottom: 1px solid var(--line); text-align: center; vertical-align: top; }
+  .grid th:first-child, .grid td:first-child { text-align: left; width: 60%; font-weight: 400; }
+  .grid input { accent-color: var(--accent); width: 1.1rem; height: 1.1rem; }
+  .gridwrap { overflow-x: auto; }
+
+  .actions { display: flex; gap: .75rem; align-items: center; margin-top: 2rem; }
+  button {
+    font: inherit; font-weight: 600; cursor: pointer;
+    padding: .8rem 1.35rem; border-radius: 999px; border: 1px solid var(--accent);
+    background: var(--accent); color: var(--accent-ink);
+  }
+  button.quiet { background: transparent; color: var(--accent); }
+  button[disabled] { opacity: .5; cursor: not-allowed; }
+  .hint { color: var(--muted); font-size: .9rem; }
+  .err { color: var(--urgent); font-weight: 500; margin-top: .75rem; }
+
+  .notice {
+    border-left: 3px solid var(--accent); background: var(--surface);
+    padding: .9rem 1.1rem; border-radius: 0 var(--radius) var(--radius) 0; margin: 1.25rem 0;
+  }
+  .notice.warn { border-left-color: var(--urgent); }
+
+  .center { text-align: center; padding-top: 10vh; }
+  .center h1 { margin-bottom: 1rem; }
+
+  @media (prefers-reduced-motion: reduce) { .rail > i { transition: none; } }
+  @media (max-width: 480px) { main { padding-top: 1.25rem; } .grid { font-size: .85rem; } }
+</style>
+</head>
+<body>
+<div class="rail hidden" id="rail"><i id="railFill"></i></div>
+<header class="bar" id="bar" hidden>
+  <div class="where" id="where"></div>
+  <div class="clock" id="clock"></div>
+</header>
+<main id="app" aria-live="polite"></main>
+
+<script src="config.js"></script>
+<script>
+(() => {
+  const C = window.TEST_CONFIG;
+  const app = document.getElementById('app');
+  const bar = document.getElementById('bar');
+  const where = document.getElementById('where');
+  const clock = document.getElementById('clock');
+  const rail = document.getElementById('rail');
+  const railFill = document.getElementById('railFill');
+  const KEY = 'uxelbi-diag-' + C.edition;
+
+  // ---------- state, persisted so a refresh does not wipe the attempt ----------
+  let S = load() || null;
+  function load() { try { return JSON.parse(sessionStorage.getItem(KEY)); } catch { return null; } }
+  function save() { try { sessionStorage.setItem(KEY, JSON.stringify(S)); } catch {} }
+
+  function fresh(name, email) {
+    return {
+      name, email,
+      startedAt: new Date().toISOString(),
+      section: 0,            // index into C.sections
+      qIndex: 0,             // for onePerScreen sections
+      deadlines: {},         // sectionId -> epoch ms
+      sectionTimes: {},      // sectionId -> {start, end}
+      order: {},             // questionId -> shuffled option index order
+      answers: {},           // questionId -> value
+      incidents: [],         // {t, section, kind}
+      done: false, submitted: false,
+    };
+  }
+
+  // ---------- helpers ----------
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const shuffled = n => { const a = [...Array(n).keys()]; for (let i = n-1; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]] = [a[j],a[i]]; } return a; };
+  const mmss = ms => { const s = Math.max(0, Math.ceil(ms/1000)); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; };
+  const sec = () => C.sections[S.section];
+  const now = () => Date.now();
+
+  function optionOrder(q, sectionShuffle) {
+    const doShuffle = q.shuffle ?? sectionShuffle ?? false;
+    if (!S.order[q.id]) S.order[q.id] = doShuffle ? shuffled(q.options.length) : [...Array(q.options.length).keys()];
+    return S.order[q.id];
+  }
+
+  // ---------- incident logging ----------
+  function logIncident(kind) {
+    if (!S || S.done) return;
+    S.incidents.push({ t: new Date().toISOString(), section: sec()?.id, kind });
+    save();
+  }
+  document.addEventListener('visibilitychange', () => { if (document.hidden) logIncident('left-tab'); });
+  window.addEventListener('blur', () => logIncident('window-blur'));
+  document.addEventListener('contextmenu', e => { if (S && !S.done && sec()?.onePerScreen) e.preventDefault(); });
+  document.addEventListener('copy', e => { if (S && !S.done && sec()?.onePerScreen) { e.preventDefault(); logIncident('copy-attempt'); } });
+
+  // ---------- timer ----------
+  let tick = null;
+  function startTimer() {
+    clearInterval(tick);
+    const s = sec();
+    if (!s.minutes) { rail.classList.add('hidden'); clock.textContent = 'No time limit'; clock.classList.remove('urgent'); return; }
+    if (!S.deadlines[s.id]) { S.deadlines[s.id] = now() + s.minutes*60000; save(); }
+    rail.classList.remove('hidden');
+    const total = s.minutes*60000;
+    const update = () => {
+      const left = S.deadlines[s.id] - now();
+      clock.textContent = mmss(left);
+      railFill.style.transform = `scaleX(${Math.max(0, left/total)})`;
+      const urgent = left < 60000;
+      clock.classList.toggle('urgent', urgent); rail.classList.toggle('urgent', urgent);
+      if (left <= 0) { clearInterval(tick); advanceSection('timeout'); }
+    };
+    update(); tick = setInterval(update, 1000);
+  }
+
+  // ---------- flow ----------
+  function windowState() {
+    const t = now();
+    if (C.opensAt && t < Date.parse(C.opensAt)) return 'early';
+    if (C.closesAt && t > Date.parse(C.closesAt)) return 'closed';
+    return 'open';
+  }
+
+  function render() {
+    if (!S) return renderWelcome();
+    if (S.done) return renderDone();
+    bar.hidden = false;
+    const s = sec();
+    where.textContent = s.title;
+    startTimer();
+    if (s.onePerScreen) renderOneQuestion(s); else renderWholeSection(s);
+    window.scrollTo({ top: 0 });
+  }
+
+  function renderWelcome() {
+    bar.hidden = true; rail.classList.add('hidden');
+    const w = windowState();
+    const plan = C.sections.map(s => `<li><span>${esc(s.title)}</span><span>${s.minutes ? s.minutes + ' min' : 'untimed'}</span></li>`).join('');
+    const blocked = w === 'early' ? `<div class="notice warn">This test is not open yet. It opens ${new Date(C.opensAt).toLocaleString()}.</div>`
+                  : w === 'closed' ? `<div class="notice warn">This test has closed.</div>` : '';
+    app.innerHTML = `
+      <div class="org">${esc(C.org)}</div>
+      <h1>${esc(C.title)}</h1>
+      ${C.intro.map(p => `<p>${esc(p)}</p>`).join('')}
+      <ul class="plan">${plan}</ul>
+      ${blocked}
+      <form id="startForm" ${w !== 'open' ? 'hidden' : ''}>
+        <label class="field"><span>Full name</span><input type="text" name="name" required autocomplete="name"></label>
+        <label class="field"><span>${C.emailDomain ? esc(C.emailDomain) + ' email' : 'Email'}</span><input type="email" name="email" required autocomplete="email" placeholder="${C.emailDomain ? 'you@' + esc(C.emailDomain) : ''}"></label>
+        <div class="actions">
+          <button type="submit">Start Part 1</button>
+          <span class="hint">The first timer starts when you press this.</span>
+        </div>
+        <div class="err" id="startErr"></div>
+      </form>`;
+    const f = document.getElementById('startForm');
+    f?.addEventListener('submit', async e => {
+      e.preventDefault();
+      const name = f.name.value.trim(); const email = f.email.value.trim().toLowerCase();
+      const err = document.getElementById('startErr');
+      if (C.emailDomain && !email.endsWith('@' + C.emailDomain)) { err.textContent = `Use your ${C.emailDomain} email.`; return; }
+      S = fresh(name, email); S.answers.fullName = name; save();
+      beginSection();
+      post('attempts', { edition: C.edition, email, name, started_at: S.startedAt }).catch(() => {});
+      render();
+    });
+  }
+
+  function beginSection() {
+    const s = sec();
+    S.qIndex = 0;
+    S.sectionTimes[s.id] = { start: new Date().toISOString(), end: null };
+    save();
+  }
+
+  function advanceSection(reason) {
+    const s = sec();
+    S.sectionTimes[s.id].end = new Date().toISOString();
+    S.sectionTimes[s.id].reason = reason;
+    if (S.section + 1 < C.sections.length) { S.section++; beginSection(); render(); }
+    else { S.done = true; save(); clearInterval(tick); render(); submit(); }
+  }
+
+  function questionHTML(q, i, sectionShuffle) {
+    const num = `<div class="num">Question ${i+1}</div>`;
+    const stem = q.text ? `<div class="stem">${esc(q.text)}</div>` : '';
+    const img = q.image ? `<img src="${esc(q.image)}" alt="">` : '';
+    const label = q.label ? `<div class="stem">${esc(q.label)}</div>` : '';
+    const val = S.answers[q.id];
+    if (q.type === 'choice') {
+      const order = optionOrder(q, sectionShuffle);
+      return `<div class="q" data-q="${q.id}">${num}${img}${stem}<div class="opts" role="radiogroup">${order.map(oi =>
+        `<label class="opt"><input type="radio" name="${q.id}" value="${oi}" ${val === oi ? 'checked' : ''}><span>${esc(q.options[oi])}</span></label>`).join('')}</div></div>`;
+    }
+    if (q.type === 'multi') {
+      const chosen = Array.isArray(val) ? val : [];
+      return `<div class="q" data-q="${q.id}">${num}${stem}<div class="opts">${q.options.map((o, oi) =>
+        `<label class="opt"><input type="checkbox" name="${q.id}" value="${oi}" ${chosen.includes(oi) ? 'checked' : ''}><span>${esc(o)}</span></label>`).join('')}</div>${q.max ? `<p class="hint" style="margin-top:.5rem">Up to ${q.max}.</p>` : ''}</div>`;
+    }
+    if (q.type === 'text') {
+      return `<div class="q" data-q="${q.id}">${num}${label}${q.text ? `<p>${esc(q.text)}</p>` : ''}<textarea name="${q.id}" rows="${q.rows || 5}">${esc(val)}</textarea></div>`;
+    }
+    if (q.type === 'short') {
+      return `<div class="q" data-q="${q.id}"><label class="field"><span>${esc(q.label)}${q.required ? '' : ' <span class="hint">(optional)</span>'}</span><input type="text" name="${q.id}" value="${esc(val)}" ${q.required ? 'required' : ''}></label></div>`;
+    }
+    if (q.type === 'grid') {
+      const v = val || {};
+      const head = `<tr><th></th>${[1,2,3,4,5].map(n => `<th>${n}</th>`).join('')}</tr>`;
+      const rows = q.rows.map(r => `<tr><td>${esc(r.label)}</td>${[1,2,3,4,5].map(n =>
+        `<td><input type="radio" name="${q.id}__${r.id}" value="${n}" ${v[r.id] === n ? 'checked' : ''} aria-label="${esc(r.label)}: ${n}"></td>`).join('')}</tr>`).join('');
+      return `<div class="q" data-q="${q.id}">${num}${stem}<ul class="scale">${q.scale.map(x => `<li>${esc(x)}</li>`).join('')}</ul><div class="gridwrap"><table class="grid">${head}${rows}</table></div></div>`;
+    }
+    return '';
+  }
+
+  function collect(root, s) {
+    for (const q of s.questions) {
+      if (q.type === 'choice') { const r = root.querySelector(`input[name="${q.id}"]:checked`); if (r) S.answers[q.id] = Number(r.value); }
+      else if (q.type === 'multi') { S.answers[q.id] = [...root.querySelectorAll(`input[name="${q.id}"]:checked`)].map(x => Number(x.value)); }
+      else if (q.type === 'text' || q.type === 'short') { const el = root.querySelector(`[name="${q.id}"]`); if (el) S.answers[q.id] = el.value.trim(); }
+      else if (q.type === 'grid') { const o = {}; for (const r of q.rows) { const x = root.querySelector(`input[name="${q.id}__${r.id}"]:checked`); if (x) o[r.id] = Number(x.value); } S.answers[q.id] = o; }
+    }
+    save();
+  }
+
+  function renderOneQuestion(s) {
+    const q = s.questions[S.qIndex];
+    const last = S.qIndex === s.questions.length - 1;
+    app.innerHTML = `<div class="part1"><p class="muted">${S.qIndex+1} of ${s.questions.length}. You cannot go back.</p>
+      ${questionHTML(q, S.qIndex, s.shuffleOptions)}
+      <div class="actions"><button id="next">${last ? 'Finish ' + esc(s.title.split(':')[0]) : 'Next question'}</button><span class="hint" id="nextHint">Choose an answer to continue.</span></div></div>`;
+    const btn = document.getElementById('next'); btn.disabled = S.answers[q.id] === undefined;
+    app.querySelectorAll('input[type=radio]').forEach(r => r.addEventListener('change', () => { btn.disabled = false; document.getElementById('nextHint').textContent = ''; }));
+    btn.addEventListener('click', () => {
+      collect(app, { questions: [q] });
+      if (last) advanceSection('finished'); else { S.qIndex++; save(); render(); }
+    });
+    // keep answers if the timer fires mid-question
+    app.addEventListener('change', () => collect(app, { questions: [q] }));
+  }
+
+  function renderWholeSection(s) {
+    const isLast = S.section === C.sections.length - 1;
+    app.innerHTML = `<h2>${esc(s.title)}</h2>
+      <form id="sec">${s.questions.map((q, i) => questionHTML(q, i, s.shuffleOptions)).join('')}
+      <div class="actions"><button type="submit">${isLast ? 'Submit everything' : 'Finish ' + esc(s.title.split(':')[0])}</button>
+      <span class="hint">${s.minutes ? 'Unanswered items are submitted as blank when the timer ends.' : ''}</span></div>
+      <div class="err" id="secErr"></div></form>`;
+    const f = document.getElementById('sec');
+    f.addEventListener('change', () => collect(f, s));
+    f.addEventListener('input', () => collect(f, s));
+    // enforce multi max
+    for (const q of s.questions.filter(q => q.type === 'multi' && q.max)) {
+      f.addEventListener('change', e => {
+        if (e.target.name !== q.id) return;
+        const boxes = [...f.querySelectorAll(`input[name="${q.id}"]`)];
+        const n = boxes.filter(b => b.checked).length;
+        boxes.forEach(b => { if (!b.checked) b.disabled = n >= q.max; });
+      });
+    }
+    f.addEventListener('submit', e => {
+      e.preventDefault(); collect(f, s);
+      const missing = s.questions.filter(q => q.required && !S.answers[q.id]);
+      if (missing.length) { document.getElementById('secErr').textContent = 'Fill in the required fields first.'; return; }
+      advanceSection('finished');
+    });
+  }
+
+  function score() {
+    const key = C.answerKey; if (!key) return null;
+    const p1 = C.sections.find(s => s.id === 'part1');
+    let n = 0; for (const q of p1.questions) if (S.answers[q.id] === key[q.id]) n++;
+    return { n, of: p1.questions.length };
+  }
+
+  function renderDone() {
+    bar.hidden = true; rail.classList.add('hidden');
+    const sc = C.showScore ? score() : null;
+    app.innerHTML = `<div class="center">
+      <div class="org">${esc(C.org)}</div>
+      <h1 id="doneTitle">${S.submitted ? "You're done." : 'Saving your answers'}</h1>
+      <p class="muted" id="doneMsg">${S.submitted ? 'Thanks for taking the time. You can close this tab.' : 'Hold on a second.'}</p>
+      ${sc ? `<p>Part 1: ${sc.n} of ${sc.of}</p>` : ''}
+      <div class="err" id="doneErr"></div>
+      <div class="actions" style="justify-content:center"><button id="retry" hidden>Try saving again</button></div>
+    </div>`;
+    document.getElementById('retry')?.addEventListener('click', submit);
+  }
+
+  // ---------- Supabase REST (no SDK needed) ----------
+  async function post(table, row) {
+    const r = await fetch(`${C.supabase.url}/rest/v1/${table}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: C.supabase.anonKey, Authorization: 'Bearer ' + C.supabase.anonKey, Prefer: 'return=minimal' },
+      body: JSON.stringify(row),
+    });
+    if (!r.ok) { const t = await r.text(); const e = new Error(t); e.status = r.status; throw e; }
+  }
+
+  async function submit() {
+    if (S.submitted) return;
+    const err = document.getElementById('doneErr'); const retry = document.getElementById('retry');
+    try {
+      await post('responses', {
+        edition: C.edition, email: S.email, name: S.name,
+        started_at: S.startedAt, finished_at: new Date().toISOString(),
+        answers: S.answers, section_times: S.sectionTimes, option_order: S.order,
+        incidents: S.incidents, user_agent: navigator.userAgent,
+      });
+      S.submitted = true; save(); renderDone();
+    } catch (e) {
+      if (e.status === 409) { S.submitted = true; save(); renderDone(); document.getElementById('doneMsg').textContent = 'A submission from this email was already recorded.'; return; }
+      document.getElementById('doneTitle').textContent = 'Could not save';
+      err.textContent = 'Your answers are still on this page. Check your connection and try again. If it keeps failing, screenshot this screen and send it to the organizers.';
+      retry.hidden = false;
+      console.error(e);
+    }
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>
