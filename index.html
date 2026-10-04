@@ -108,7 +108,15 @@
   .grid input { accent-color: var(--accent); width: 1.1rem; height: 1.1rem; }
   .gridwrap { overflow-x: auto; }
 
-  .actions { display: flex; gap: .75rem; align-items: center; margin-top: 2rem; }
+  .qnav { display: flex; flex-wrap: wrap; gap: .4rem; margin: 0 0 1.5rem; }
+  .qnav button {
+    min-width: 2.4rem; height: 2.4rem; padding: 0 .5rem; border-radius: 8px;
+    background: var(--paper); color: var(--ink); border: 1px solid var(--line); font-weight: 500;
+  }
+  .qnav button.answered { background: var(--surface); border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+  .qnav button.current { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .actions { display: flex; gap: .75rem; align-items: center; margin-top: 2rem; flex-wrap: wrap; }
+  .actions .spacer { flex: 1; }
   button {
     font: inherit; font-weight: 600; cursor: pointer;
     padding: .8rem 1.35rem; border-radius: 999px; border: 1px solid var(--accent);
@@ -328,18 +336,39 @@
 
   function renderOneQuestion(s) {
     const q = s.questions[S.qIndex];
-    const last = S.qIndex === s.questions.length - 1;
-    app.innerHTML = `<div class="part1"><p class="muted">${S.qIndex+1} of ${s.questions.length}. You cannot go back.</p>
+    const n = s.questions.length;
+    const answered = i => S.answers[s.questions[i].id] !== undefined;
+    const unanswered = s.questions.filter((_, i) => !answered(i)).length;
+    const partName = esc(s.title.split(':')[0]);
+    app.innerHTML = `<div class="part1">
+      <div class="qnav" role="navigation" aria-label="Questions">${s.questions.map((_, i) =>
+        `<button type="button" data-go="${i}" class="${i === S.qIndex ? 'current' : ''} ${answered(i) ? 'answered' : ''}" aria-label="Question ${i+1}${answered(i) ? ', answered' : ''}">${i+1}</button>`).join('')}</div>
       ${questionHTML(q, S.qIndex, s.shuffleOptions)}
-      <div class="actions"><button id="next">${last ? 'Finish ' + esc(s.title.split(':')[0]) : 'Next question'}</button><span class="hint" id="nextHint">Choose an answer to continue.</span></div></div>`;
-    const btn = document.getElementById('next'); btn.disabled = S.answers[q.id] === undefined;
-    app.querySelectorAll('input[type=radio]').forEach(r => r.addEventListener('change', () => { btn.disabled = false; document.getElementById('nextHint').textContent = ''; }));
-    btn.addEventListener('click', () => {
-      collect(app, { questions: [q] });
-      if (last) advanceSection('finished'); else { S.qIndex++; save(); render(); }
-    });
+      <div class="actions">
+        <button type="button" class="quiet" id="prev" ${S.qIndex === 0 ? 'disabled' : ''}>Back</button>
+        <button type="button" id="next" ${S.qIndex === n - 1 ? 'disabled' : ''}>Next</button>
+        <span class="spacer"></span>
+        <button type="button" class="quiet" id="finish">Finish ${partName}</button>
+      </div>
+      <p class="hint" id="finishHint">${unanswered ? unanswered + ' unanswered. You can move between questions until you finish this part.' : 'All answered. Finishing locks this part.'}</p>
+    </div>`;
+    const go = i => { collect(app, { questions: [q] }); S.qIndex = i; save(); render(); };
+    app.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => go(Number(b.dataset.go))));
+    document.getElementById('prev').addEventListener('click', () => go(S.qIndex - 1));
+    document.getElementById('next').addEventListener('click', () => go(S.qIndex + 1));
     // keep answers if the timer fires mid-question
     app.addEventListener('change', () => collect(app, { questions: [q] }));
+    let armed = false;
+    document.getElementById('finish').addEventListener('click', () => {
+      collect(app, { questions: [q] });
+      const left = s.questions.filter(x => S.answers[x.id] === undefined).length;
+      if (left && !armed) {
+        armed = true;
+        document.getElementById('finishHint').textContent = `${left} unanswered. Press Finish again to lock this part anyway, or go back and answer them.`;
+        return;
+      }
+      advanceSection('finished');
+    });
   }
 
   function renderWholeSection(s) {
