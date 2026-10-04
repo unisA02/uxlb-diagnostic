@@ -136,6 +136,19 @@
   .center { text-align: center; padding-top: 10vh; }
   .center h1 { margin-bottom: 1rem; }
 
+  /* Deterrents for protected (onePerScreen) parts */
+  .part1 .q img { pointer-events: none; -webkit-user-drag: none; user-select: none; }
+  .wm { position: fixed; inset: 0; pointer-events: none; z-index: 4; overflow: hidden; display: none; }
+  body.protected .wm { display: block; }
+  .wm span {
+    position: absolute; white-space: nowrap; font-size: .85rem; font-weight: 500;
+    color: var(--ink); opacity: .07; transform: rotate(-28deg); transform-origin: left top;
+  }
+  body.shielded main { filter: blur(14px); transition: filter .15s; }
+  .shield { position: fixed; inset: 0; z-index: 20; display: none; place-items: center; background: color-mix(in srgb, var(--paper) 70%, transparent); text-align: center; padding: 2rem; }
+  body.shielded .shield { display: grid; }
+  .shield p { max-width: 24rem; font-weight: 500; }
+  @media print { body { display: none !important; } }
   @media (prefers-reduced-motion: reduce) { .rail > i { transition: none; } }
   @media (max-width: 480px) { main { padding-top: 1.25rem; } .grid { font-size: .85rem; } }
 </style>
@@ -147,6 +160,8 @@
   <div class="clock" id="clock"></div>
 </header>
 <main id="app" aria-live="polite"></main>
+<div class="wm" id="wm" aria-hidden="true"></div>
+<div class="shield" aria-hidden="true"><p>Come back to the test tab to continue. Time away is recorded.</p></div>
 
 <script src="config.js"></script>
 <script>
@@ -193,16 +208,47 @@
     return S.order[q.id];
   }
 
-  // ---------- incident logging ----------
+  // ---------- incident logging and deterrents ----------
+  const protectedNow = () => S && !S.done && !!sec()?.onePerScreen;
   function logIncident(kind) {
     if (!S || S.done) return;
     S.incidents.push({ t: new Date().toISOString(), section: sec()?.id, kind });
     save();
   }
-  document.addEventListener('visibilitychange', () => { if (document.hidden) logIncident('left-tab'); });
-  window.addEventListener('blur', () => logIncident('window-blur'));
-  document.addEventListener('contextmenu', e => { if (S && !S.done && sec()?.onePerScreen) e.preventDefault(); });
-  document.addEventListener('copy', e => { if (S && !S.done && sec()?.onePerScreen) { e.preventDefault(); logIncident('copy-attempt'); } });
+  function shield(on) { document.body.classList.toggle('shielded', on && protectedNow()); }
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { logIncident('left-tab'); shield(true); } else shield(false); });
+  window.addEventListener('blur', () => { logIncident('window-blur'); shield(true); });
+  window.addEventListener('focus', () => shield(false));
+  document.addEventListener('contextmenu', e => { if (protectedNow()) e.preventDefault(); });
+  document.addEventListener('dragstart', e => { if (protectedNow()) e.preventDefault(); });
+  for (const ev of ['copy', 'cut']) document.addEventListener(ev, e => { if (protectedNow()) { e.preventDefault(); logIncident('copy-attempt'); } });
+  document.addEventListener('keydown', e => {
+    if (!protectedNow()) return;
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && ['p', 's', 'u'].includes(e.key.toLowerCase())) { e.preventDefault(); logIncident('key-' + e.key.toLowerCase()); }
+    if (mod && e.shiftKey && ['s', 'i', 'j', 'c'].includes(e.key.toLowerCase())) { e.preventDefault(); logIncident('key-shift-' + e.key.toLowerCase()); }
+    if (e.key === 'F12') { e.preventDefault(); logIncident('key-f12'); }
+  });
+  document.addEventListener('keyup', e => {
+    if (!protectedNow()) return;
+    if (e.key === 'PrintScreen') {
+      logIncident('printscreen');
+      // Best effort: overwrite the clipboard so a plain PrintScreen paste is empty. Not guaranteed.
+      try { navigator.clipboard?.writeText(' '); } catch {}
+    }
+  });
+  function paintWatermark() {
+    const wm = document.getElementById('wm');
+    if (!S || S.done || !protectedNow()) { document.body.classList.remove('protected'); wm.innerHTML = ''; return; }
+    document.body.classList.add('protected');
+    const label = `${S.name}  ${S.email}  ${new Date().toLocaleDateString()}`;
+    const parts = [];
+    for (let y = -40; y < window.innerHeight + 200; y += 110)
+      for (let x = -200; x < window.innerWidth + 200; x += 360)
+        parts.push(`<span style="left:${x + (y % 220 ? 180 : 0)}px;top:${y}px">${esc(label)}</span>`);
+    wm.innerHTML = parts.join('');
+  }
+  window.addEventListener('resize', paintWatermark);
 
   // ---------- timer ----------
   let tick = null;
@@ -239,12 +285,13 @@
     const s = sec();
     where.textContent = s.title;
     startTimer();
+    paintWatermark();
     if (s.onePerScreen) renderOneQuestion(s); else renderWholeSection(s);
     window.scrollTo({ top: 0 });
   }
 
   function renderWelcome() {
-    bar.hidden = true; rail.classList.add('hidden');
+    bar.hidden = true; rail.classList.add('hidden'); document.body.classList.remove('protected');
     const w = windowState();
     const plan = C.sections.map(s => `<li><span>${esc(s.title)}</span><span>${s.minutes ? s.minutes + ' min' : 'untimed'}</span></li>`).join('');
     const blocked = w === 'early' ? `<div class="notice warn">This test is not open yet. It opens ${new Date(C.opensAt).toLocaleString()}.</div>`
@@ -406,7 +453,7 @@
   }
 
   function renderDone() {
-    bar.hidden = true; rail.classList.add('hidden');
+    bar.hidden = true; rail.classList.add('hidden'); paintWatermark(); shield(false);
     const sc = C.showScore ? score() : null;
     app.innerHTML = `<div class="center">
       <div class="org">${esc(C.org)}</div>
