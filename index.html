@@ -175,10 +175,10 @@
   const railFill = document.getElementById('railFill');
   const KEY = 'uxelbi-diag-' + C.edition;
 
-  // ---------- state, persisted so a refresh does not wipe the attempt ----------
+  // ---------- state, persisted so a refresh or a new tab does not wipe the attempt ----------
   let S = load() || null;
-  function load() { try { return JSON.parse(sessionStorage.getItem(KEY)); } catch { return null; } }
-  function save() { try { sessionStorage.setItem(KEY, JSON.stringify(S)); } catch {} }
+  function load() { try { return JSON.parse(localStorage.getItem(KEY)); } catch { return null; } }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} }
 
   function fresh(name, email) {
     return {
@@ -190,7 +190,7 @@
       sectionTimes: {},      // sectionId -> {start, end}
       order: {},             // questionId -> shuffled option index order
       answers: {},           // questionId -> value
-      incidents: [],         // {t, section, kind}
+      incidents: [],         // {t, section, kind, awayMs}
       done: false, submitted: false,
     };
   }
@@ -216,9 +216,19 @@
     save();
   }
   function shield(on) { document.body.classList.toggle('shielded', on && protectedNow()); }
-  document.addEventListener('visibilitychange', () => { if (document.hidden) { logIncident('left-tab'); shield(true); } else shield(false); });
-  window.addEventListener('blur', () => { logIncident('window-blur'); shield(true); });
-  window.addEventListener('focus', () => shield(false));
+  // one incident per time away, with how long it lasted
+  let away = null;
+  function leave(kind) {
+    if (!away && S && !S.done) { logIncident(kind); away = S.incidents.at(-1); }
+    shield(true);
+  }
+  function comeBack() {
+    if (away) { away.awayMs = Date.now() - Date.parse(away.t); away = null; save(); }
+    shield(false);
+  }
+  document.addEventListener('visibilitychange', () => document.hidden ? leave('left-tab') : comeBack());
+  window.addEventListener('blur', () => leave('window-blur'));
+  window.addEventListener('focus', comeBack);
   document.addEventListener('contextmenu', e => { if (protectedNow()) e.preventDefault(); });
   document.addEventListener('dragstart', e => { if (protectedNow()) e.preventDefault(); });
   for (const ev of ['copy', 'cut']) document.addEventListener(ev, e => { if (protectedNow()) { e.preventDefault(); logIncident('copy-attempt'); } });
@@ -468,7 +478,8 @@
 
   // ---------- Supabase REST (no SDK needed) ----------
   async function post(table, row) {
-    const r = await fetch(`${C.supabase.url}/rest/v1/${table}`, {
+    const base = C.supabase.url.replace(/\/(rest\/v1\/?)?$/, '');
+    const r = await fetch(`${base}/rest/v1/${table}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', apikey: C.supabase.anonKey, Authorization: 'Bearer ' + C.supabase.anonKey, Prefer: 'return=minimal' },
       body: JSON.stringify(row),

@@ -10,7 +10,7 @@ window.TEST_CONFIG = {
 
   // Supabase project settings (Project settings > API)
   supabase: {
-    url: "https://kgdcwlvyuvyshmtuthyx.supabase.co/rest/v1/",
+    url: "https://kgdcwlvyuvyshmtuthyx.supabase.co",
     anonKey: "sb_publishable_EDST_X3muhwlV8ka1aphDQ_6VvJAspy",
   },
 
